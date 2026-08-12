@@ -1,0 +1,17 @@
+{
+  "services/openvpn_monitor": {
+    "description": "OpenVPN monitoring App permissions",
+    "read": {
+      "api": [
+        "/openvpn_mon_f/*",
+        "/openvpn_mon_c/*"
+      ]
+    },
+    "write": {
+      "api": [
+        "/openvpn_mon_f/*",
+        "/openvpn_mon_c/*"
+      ]
+    }
+  }
+}

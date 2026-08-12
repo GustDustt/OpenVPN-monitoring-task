@@ -1,0 +1,55 @@
+#!/bin/sh /etc/rc.common
+
+# Paleidziama pries rpcd (12) ir uhttpd/vuci (14), kad musu failai butu
+# pasiekiami, kol jie skaito acl.d/path.d/services katalogus.
+START=10
+
+# USE_PROCD reikalingas, kad rc.common realiai iskviestu start_service() -
+# be jo "start" komanda tiesiog grazina 0 ir nieko nedaro (zr. /etc/rc.common).
+# Pati start_service() cia neatidaro joki procd_open_instance, nes tai ne
+# nuolat veikiantis demonas, o vienkartinis paruosimo zingsnis kiekvieno
+# paleidimo metu.
+USE_PROCD=1
+
+# Siame router'yje opkg idiegia failus i /usr/local/<pilnas kelias>
+# (zr. /etc/opkg.conf "dest root /usr/local"), o ne i ju tikras vietas.
+OVERLAY_BASE=/overlay/openvpn-monitor-setup
+SRC_PREFIX=/usr/local/usr
+
+setup_static_files() {
+    # /usr/share yra symlink i /usr/local/share, kuris jau yra rasomas
+    # (dalis /usr/local overlay), tad cia uztenka tiesiog nukopijuoti
+    # failus is opkg idiegtos vietos i ju tikra kelia.
+    mkdir -p /usr/share/rpcd/acl.d /usr/share/vuci/path.d
+
+    if [ -f "$SRC_PREFIX/share/rpcd/acl.d/openvpn_monitor.json" ]; then
+        cp -a "$SRC_PREFIX/share/rpcd/acl.d/openvpn_monitor.json" /usr/share/rpcd/acl.d/openvpn_monitor.json
+    fi
+
+    if [ -f "$SRC_PREFIX/share/vuci/path.d/openvpn_monitor.json" ]; then
+        cp -a "$SRC_PREFIX/share/vuci/path.d/openvpn_monitor.json" /usr/share/vuci/path.d/openvpn_monitor.json
+    fi
+}
+
+setup_lua_service_overlay() {
+    # /usr/lib nera susietas su /usr/local, tad musu lua servisui
+    # matomam padaryti reikia overlay mount, sujungianti originalu
+    # (squashfs) turini su opkg idiegtu failu.
+    grep -q ' /usr/lib/lua/api/services overlay' /proc/mounts && return 0
+    [ -f "$SRC_PREFIX/lib/lua/api/services/openvpn_monitor.lua" ] || return 0
+
+    mkdir -p "$OVERLAY_BASE/lua-upper" "$OVERLAY_BASE/lua-work"
+    cp -a "$SRC_PREFIX/lib/lua/api/services/openvpn_monitor.lua" "$OVERLAY_BASE/lua-upper/"
+    mount -t overlay overlay \
+        -o lowerdir=/usr/lib/lua/api/services,upperdir="$OVERLAY_BASE/lua-upper",workdir="$OVERLAY_BASE/lua-work" \
+        /usr/lib/lua/api/services
+}
+
+start_service() {
+    setup_static_files
+    setup_lua_service_overlay
+}
+
+service_triggers() {
+    procd_add_reload_trigger "openvpn"
+}
